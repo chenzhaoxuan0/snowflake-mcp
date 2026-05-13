@@ -8,11 +8,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from dedalus_mcp.client import MCPClient
+from dedalus_mcp.client import BearerAuth, open_connection
 
 
 async def main(allow_writes: bool = False) -> None:
-    async with MCPClient("http://localhost:8080/mcp") as client:
+    api_key = os.getenv("DEDALUS_API_KEY", "")
+    auth = BearerAuth(access_token=api_key) if api_key else None
+
+    async with open_connection("http://localhost:8080/mcp", auth=auth) as client:
         tools = await client.list_tools()
         print("Available tools:")
         for t in tools:
