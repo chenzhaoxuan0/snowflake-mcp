@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -22,11 +22,18 @@ from snowflake_mcp.types import (
 )
 
 
-def _mock_execute(return_value):
-    """Build a mock for transport.get_client().execute() returning the given rows."""
-    mock_client = MagicMock()
-    mock_client.execute.return_value = return_value
-    return mock_client
+async def _mock_dispatch(sql, *, max_rows=100):
+    """Override me in subtests."""
+    return [], [], "not mocked"
+
+
+@pytest.fixture(autouse=True)
+def _patch_dispatch(self=None):
+    async def _noop(sql, **kw):
+        return [], [], "not mocked"
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=_noop):
+        yield
 
 
 # --- list_databases ---
@@ -34,17 +41,15 @@ def _mock_execute(return_value):
 
 @pytest.mark.asyncio
 async def test_list_databases_success():
-    mock_client = _mock_execute(
-        (
-            ["name", "created_on", "retention_time"],
-            [
-                {"name": "DB1", "created_on": "2024-01-01", "retention_time": "1"},
-                {"name": "DB2", "created_on": "2024-02-01", "retention_time": "1"},
-            ],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        columns = ["created_on", "name", "retention_time"]
+        rows = [
+            ["2024-01-01", "DB1", "1"],
+            ["2024-02-01", "DB2", "1"],
+        ]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await list_databases()
 
     assert isinstance(result, ListDatabasesResult)
@@ -55,13 +60,14 @@ async def test_list_databases_success():
 
 @pytest.mark.asyncio
 async def test_list_databases_error():
-    mock_client = MagicMock()
-    mock_client.execute.side_effect = ConnectionError("connection failed")
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        return [], [], "forbidden"
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await list_databases()
 
     assert not result.success
-    assert "connection failed" in result.error
+    assert "forbidden" in result.error
 
 
 # --- list_schemas ---
@@ -69,19 +75,17 @@ async def test_list_databases_error():
 
 @pytest.mark.asyncio
 async def test_list_schemas_with_database():
-    mock_client = _mock_execute(
-        (
-            ["name", "database_name", "created_on"],
-            [{"name": "PUBLIC", "database_name": "MYDB", "created_on": "2024-01-01"}],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        assert "MYDB" in sql
+        columns = ["created_on", "database_name", "name"]
+        rows = [["2024-01-01", "MYDB", "PUBLIC"]]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await list_schemas(database="MYDB")
 
     assert isinstance(result, ListSchemasResult)
     assert result.success
-    assert len(result.schemas) == 1
     assert result.schemas[0].name == "PUBLIC"
 
 
@@ -90,14 +94,12 @@ async def test_list_schemas_with_database():
 
 @pytest.mark.asyncio
 async def test_list_tables_with_db_and_schema():
-    mock_client = _mock_execute(
-        (
-            ["name", "database_name", "schema_name", "kind", "rows"],
-            [{"name": "USERS", "database_name": "DB", "schema_name": "SCH", "kind": "TABLE", "rows": "100"}],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        columns = ["database_name", "schema_name", "name", "kind", "rows"]
+        rows = [["DB", "SCH", "USERS", "TABLE", "100"]]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await list_tables(database="DB", schema="SCH")
 
     assert isinstance(result, ListTablesResult)
@@ -111,17 +113,16 @@ async def test_list_tables_with_db_and_schema():
 
 @pytest.mark.asyncio
 async def test_describe_table():
-    mock_client = _mock_execute(
-        (
-            ["name", "type", "null?", "default", "pk"],
-            [
-                {"name": "ID", "type": "NUMBER(38,0)", "null?": "N", "default": "", "pk": "Y"},
-                {"name": "NAME", "type": "VARCHAR(100)", "null?": "Y", "default": "", "pk": "N"},
-            ],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        assert "DESCRIBE" in sql
+        columns = ["name", "type", "null?", "default", "pk"]
+        rows = [
+            ["ID", "NUMBER(38,0)", "N", "", "Y"],
+            ["NAME", "VARCHAR(100)", "Y", "", "N"],
+        ]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await describe_table(table="USERS", database="DB", schema="SCH")
 
     assert isinstance(result, DescribeTableResult)
@@ -136,14 +137,12 @@ async def test_describe_table():
 
 @pytest.mark.asyncio
 async def test_run_query_select_success():
-    mock_client = _mock_execute(
-        (
-            ["ID", "NAME"],
-            [{"ID": 1, "NAME": "Alice"}],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        columns = ["ID", "NAME"]
+        rows = [[1, "Alice"]]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await run_query(sql="SELECT * FROM users")
 
     assert isinstance(result, QueryResult)
@@ -171,10 +170,12 @@ async def test_run_query_write_rejected_by_default():
 
 @pytest.mark.asyncio
 async def test_run_query_write_allowed_with_flag():
-    mock_client = _mock_execute(
-        (["status"], [{"status": "inserted"}], False)
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        columns = ["status"]
+        rows = [["inserted"]]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await run_query(sql="INSERT INTO t VALUES (1)", allow_writes=True)
 
     assert isinstance(result, QueryResult)
@@ -192,10 +193,12 @@ async def test_run_query_multi_statement_write_rejected():
 
 @pytest.mark.asyncio
 async def test_run_query_show_allowed():
-    mock_client = _mock_execute(
-        (["name"], [{"name": "DB1"}], False)
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        columns = ["name"]
+        rows = [["DB1"]]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await run_query(sql="SHOW DATABASES")
 
     assert result.success
@@ -203,13 +206,16 @@ async def test_run_query_show_allowed():
 
 @pytest.mark.asyncio
 async def test_run_query_truncated():
-    mock_client = _mock_execute(
-        (["ID"], [{"ID": i} for i in range(5)], True)
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, *, max_rows=100):
+        columns = ["ID"]
+        rows = [[i] for i in range(150)]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await run_query(sql="SELECT * FROM big_table")
 
     assert result.truncated is True
+    assert result.row_count == 100
 
 
 # --- list_warehouses ---
@@ -217,17 +223,16 @@ async def test_run_query_truncated():
 
 @pytest.mark.asyncio
 async def test_list_warehouses():
-    mock_client = _mock_execute(
-        (
-            ["name", "state", "size"],
-            [
-                {"name": "COMPUTE_WH", "state": "STARTED", "size": "X-Small"},
-                {"name": "LOAD_WH", "state": "SUSPENDED", "size": "Small"},
-            ],
-            False,
-        )
-    )
-    with patch("snowflake_mcp.tools.get_client", return_value=mock_client):
+    async def fake_dispatch(sql, **kw):
+        assert "SHOW WAREHOUSES" in sql
+        columns = ["name", "state", "size"]
+        rows = [
+            ["COMPUTE_WH", "STARTED", "X-Small"],
+            ["LOAD_WH", "SUSPENDED", "Small"],
+        ]
+        return columns, rows, None
+
+    with patch("snowflake_mcp.tools.dispatch_sql", side_effect=fake_dispatch):
         result = await list_warehouses()
 
     assert isinstance(result, ListWarehousesResult)

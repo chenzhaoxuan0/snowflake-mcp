@@ -8,6 +8,7 @@ from snowflake_mcp.tools import (
     list_warehouses,
     run_query,
 )
+from snowflake_mcp.transport import snowflake_conn
 
 __all__ = [
     "describe_table",
@@ -16,4 +17,5 @@ __all__ = [
     "list_tables",
     "list_warehouses",
     "run_query",
+    "snowflake_conn",
 ]

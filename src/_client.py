@@ -36,6 +36,25 @@ async def main(allow_writes: bool = False) -> None:
             print(result)
             print()
 
+        schema = os.getenv("SNOWFLAKE_SCHEMA", "")
+        if db and schema:
+            print("--- list_tables ---")
+            result = await client.call_tool("list_tables", {"database": db, "schema": schema})
+            print(result)
+            print()
+
+        if db and schema:
+            print("--- describe_table ---")
+            table = os.getenv("SNOWFLAKE_TEST_TABLE", "")
+            if table:
+                result = await client.call_tool("describe_table", {
+                    "table": table,
+                    "database": db,
+                    "schema": schema,
+                })
+                print(result)
+                print()
+
         print("--- run_query (SELECT) ---")
         result = await client.call_tool("run_query", {"sql": "SELECT CURRENT_VERSION() AS ver"})
         print(result)

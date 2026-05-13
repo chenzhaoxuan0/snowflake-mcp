@@ -1,33 +1,45 @@
 # Auth Architecture: Snowflake MCP
 
-**ADR-001: SDK Direct Connection (Exception)**
+**ADR-001: SQL API REST + DAuth Token (Type 3 Compliant)**
 
 ## Status
 
-Accepted — explicit exception to standard Type 3 DAuth dispatch.
+Accepted — full Type 3 DAuth compliance.
 
 ## Context
 
 Standard Type 3 DAuth servers use `Connection` + `SecretKeys` + `ctx.dispatch()` to route authenticated HTTP requests through the DAuth enclave. Tool code never reads credentials.
 
-Snowflake has two access paths:
+Snowflake SQL API (`POST /api/v2/statements`) requires a `Bearer` token. Supported token types:
 
-1. **SQL API (REST)**: Requires `Bearer` token. Token types: OAuth, key-pair JWT, programmatic access token. Password credentials cannot produce a valid bearer token without secret exposure.
-2. **`snowflake-connector-python` SDK**: Accepts user/password or private-key credentials directly. Manages session, authentication, and wire protocol internally.
-
-Owner 3 provides: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD` (or `SNOWFLAKE_PRIVATE_KEY`), `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`.
+1. **Programmatic Access Token (PAT)** — created via `CREATE PROGRAMMATIC ACCESS TOKEN` in Snowflake
+2. **OAuth 2.0 access token** — from a configured Security Integration
+3. **Key-pair JWT** — signed with a private key (requires key material exposure)
 
 ## Decision
 
-Use `snowflake-connector-python` SDK with direct credential reads from environment variables. Credentials are read in a single centralized module (`transport.py`). Tool code calls transport methods and never accesses credentials.
+Use SQL API REST with PAT or OAuth token, managed through DAuth dispatch. The token is stored as `SNOWFLAKE_TOKEN` env var, registered as a DAuth secret, and injected into requests via the standard `Connection` auth flow.
+
+```python
+snowflake_conn = Connection(
+    name="snowflake",
+    secrets=SecretKeys(token="SNOWFLAKE_TOKEN"),
+    base_url="https://<account>.snowflakecomputing.com",
+    auth_header_format="Bearer {api_key}",
+)
+```
+
+Every tool calls `ctx.dispatch()` which routes through DAuth. Tool code never reads `SNOWFLAKE_TOKEN`.
+
+Additional header `X-Snowflake-Authorization-Token-Type: PROGRAMMATIC_ACCESS_TOKEN` is attached in the dispatch helper.
 
 ## Consequences
 
-- **No DAuth dispatch**: Connection management bypasses the DAuth enclave
-- **Credential exposure**: Password is read by application code at runtime (not logged or returned in results)
+- **Full Type 3 DAuth**: Token managed by DAuth enclave, never exposed to tool code
+- **No SDK dependency**: Pure REST via `ctx.dispatch()`
+- **Credential contract**: Users must provide a PAT or OAuth token (not password/private key)
 - **Security mitigations**:
-  - All credential reads centralized in `transport.py`
-  - No secret values in error messages, logs, or tool results
+  - Token never in tool code, logs, or error messages
   - `run_query` defaults to SELECT-only with `is_read_only_sql()` enforcement
   - Max row truncation prevents large result leaks
   - Identifier quoting prevents SQL injection
@@ -37,18 +49,12 @@ Use `snowflake-connector-python` SDK with direct credential reads from environme
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `SNOWFLAKE_ACCOUNT` | Yes | Account identifier (e.g., `xy12345.us-east-1`) |
-| `SNOWFLAKE_USER` | Yes | Username |
-| `SNOWFLAKE_PASSWORD` | Yes* | Password auth (mutually exclusive with PRIVATE_KEY) |
-| `SNOWFLAKE_PRIVATE_KEY` | No* | Key-pair auth path |
+| `SNOWFLAKE_TOKEN` | Yes | PAT or OAuth token |
+| `SNOWFLAKE_TOKEN_TYPE` | No | Token type header (default: `PROGRAMMATIC_ACCESS_TOKEN`) |
 | `SNOWFLAKE_WAREHOUSE` | No | Default warehouse for queries |
 | `SNOWFLAKE_DATABASE` | No | Default database context |
 | `SNOWFLAKE_SCHEMA` | No | Default schema context |
 
-*One of PASSWORD or PRIVATE_KEY is required.
+## Previous Approach (Superseded)
 
-## Alternative Considered
-
-SQL API with DAuth-managed OAuth token was preferred but rejected because:
-- Owner 3 credential contract does not include OAuth tokens
-- Generating JWTs from private keys would expose key material to tool code
-- Requesting a credential contract change adds deployment complexity
+v0.0.1 used `snowflake-connector-python` SDK with direct password/private-key auth. This violated Type 3 DAuth requirements. Replaced with SQL API REST + DAuth in v0.1.0.

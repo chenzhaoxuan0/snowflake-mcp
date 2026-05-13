@@ -1,34 +1,46 @@
 # Source Selection: Snowflake MCP
 
-**Decision:** Build native using `snowflake-connector-python` SDK.
+**Decision:** Build native using Snowflake SQL API REST with DAuth-managed token.
 
 ## Evaluation
 
 ### Official Snowflake MCP
 
-Snowflake-Labs does not ship a general-purpose Snowflake MCP server as of 2025-05. Cortex has AI features but no MCP protocol implementation.
+Snowflake-Labs does not ship a general-purpose Snowflake MCP server. Cortex has AI features but no MCP protocol implementation.
 
 ### Community: `isaacwasserman/mcp-snowflake-server`
 
 - Uses `snowflake-connector-python` for direct DB connections
-- SQL validation is minimal
+- Python, but minimal SQL validation
 - No DAuth integration
-- TypeScript-based tool definitions
-- Not adaptable to our Python + DAuth framework
+- Not adaptable to Type 3 DAuth dispatch pattern
 
 ### Snowflake SQL API (REST)
 
 - `POST /api/v2/statements` for SQL execution
-- Auth requires `Bearer` token (OAuth, key-pair JWT, or programmatic access token)
-- Password-based credentials from Owner 3 cannot be used directly with SQL API
-- Generating a JWT from a private key inside tool code would expose secrets, violating DAuth principles
+- Auth requires `Bearer` token (OAuth, key-pair JWT, or Programmatic Access Token)
+- Standard REST API, works naturally with DAuth `ctx.dispatch()`
+- No SDK dependency needed
 
-## Decision: SDK Direct (ADR Exception)
+### `snowflake-connector-python` SDK
 
-`snowflake-connector-python` is the only viable option because:
+- Accepts user/password or private-key credentials directly
+- Not compatible with DAuth dispatch pattern
+- SDK manages its own wire protocol
 
-1. Owner 3 provides password/private-key credentials, not OAuth tokens
-2. SQL API requires bearer tokens that cannot be derived from password credentials without exposing secrets
-3. The connector library handles auth, session management, and result formatting natively
+## Decision: SQL API REST + DAuth (Type 3 Compliant)
 
-This is an explicit exception to standard Type 3 DAuth dispatch. See `auth-architecture.md` for details.
+Use Snowflake SQL API REST with Programmatic Access Token (PAT) or OAuth token, managed through DAuth `Connection` + `SecretKeys` + `ctx.dispatch()`.
+
+This is the only approach that achieves full Type 3 DAuth compliance:
+
+1. Token is stored as DAuth secret (`SNOWFLAKE_TOKEN`)
+2. All SQL requests routed through `ctx.dispatch()` — tool code never sees the token
+3. Standard `Connection` object with `Bearer {api_key}` auth header format
+4. No SDK dependency needed
+
+### Credential Change
+
+- Old: `SNOWFLAKE_PASSWORD` / `SNOWFLAKE_PRIVATE_KEY` (SDK direct)
+- New: `SNOWFLAKE_TOKEN` (PAT or OAuth) via DAuth
+- Users need to create a Programmatic Access Token in Snowflake: `CREATE PROGRAMMATIC ACCESS TOKEN ...`

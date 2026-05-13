@@ -18,9 +18,8 @@ A Snowflake data warehouse MCP server powered by [Dedalus](https://dedaluslabs.a
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SNOWFLAKE_ACCOUNT` | Yes | Account identifier (e.g., `xy12345.us-east-1`) |
-| `SNOWFLAKE_USER` | Yes | Username |
-| `SNOWFLAKE_PASSWORD` | Yes* | Password (or use `SNOWFLAKE_PRIVATE_KEY`) |
-| `SNOWFLAKE_PRIVATE_KEY` | No* | Private key for key-pair auth |
+| `SNOWFLAKE_TOKEN` | Yes | Programmatic Access Token or OAuth token |
+| `SNOWFLAKE_TOKEN_TYPE` | No | Token type header (default: `PROGRAMMATIC_ACCESS_TOKEN`) |
 | `SNOWFLAKE_WAREHOUSE` | No | Default warehouse |
 | `SNOWFLAKE_DATABASE` | No | Default database context |
 | `SNOWFLAKE_SCHEMA` | No | Default schema context |
@@ -28,17 +27,19 @@ A Snowflake data warehouse MCP server powered by [Dedalus](https://dedaluslabs.a
 | `DEDALUS_API_URL` | No | Dedalus API base URL |
 | `DEDALUS_AS_URL` | No | Dedalus auth server URL (default: `https://as.dedaluslabs.ai`) |
 
-*One of `SNOWFLAKE_PASSWORD` or `SNOWFLAKE_PRIVATE_KEY` is required.
-
 ## Auth Architecture
 
-**SDK Direct Connection (ADR Exception)**. This server uses `snowflake-connector-python` for direct database connections rather than the standard DAuth dispatch path. This is because:
+**Type 3 DAuth (SQL API REST)**. This server uses the Snowflake SQL API (`POST /api/v2/statements`) with a Bearer token managed through DAuth dispatch. All requests go through `ctx.dispatch()` — tool code never reads the token.
 
-1. Snowflake SQL API requires bearer tokens, not password credentials
-2. Generating JWTs from private keys would expose key material to tool code
-3. The SDK handles auth, session management, and result formatting natively
+Users must create a Programmatic Access Token in Snowflake:
 
-All credential reads are centralized in `transport.py`. Tool code never accesses credentials. See `docs/auth-architecture.md` for details.
+```sql
+CREATE PROGRAMMATIC ACCESS TOKEN my_mcp_token
+  ROLE = SYSADMIN
+  EXPIRY = 90 DAYS;
+```
+
+See `docs/auth-architecture.md` for details.
 
 ## `run_query` Safety
 
@@ -53,7 +54,7 @@ All credential reads are centralized in `transport.py`. Tool code never accesses
 ```bash
 uv sync
 cp .env.example .env
-# Edit .env with your Snowflake credentials
+# Edit .env with your Snowflake account and token
 uv run python src/main.py
 ```
 
@@ -90,7 +91,7 @@ result = await client.call_tool("run_query", {
 
 ## Source Decision
 
-**Build native (Python SDK)**. No official Snowflake MCP exists. The `snowflake-connector-python` SDK is the only viable path because Owner 3 provides password/private-key credentials, not OAuth tokens. See `docs/source-selection.md` for details.
+**Build native (Python REST via SQL API)**. No official Snowflake MCP exists. The SQL API REST with DAuth-managed PAT token is the only approach that achieves full Type 3 DAuth compliance. See `docs/source-selection.md` for details.
 
 ## License
 

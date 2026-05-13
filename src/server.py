@@ -12,6 +12,7 @@ from snowflake_mcp import (
     list_tables,
     list_warehouses,
     run_query,
+    snowflake_conn,
 )
 
 
@@ -19,7 +20,7 @@ def create_server() -> MCPServer:
     as_url = os.getenv("DEDALUS_AS_URL", "https://as.dedaluslabs.ai")
     return MCPServer(
         name="snowflake-mcp",
-        connections=[],
+        connections=[snowflake_conn],
         http_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         streamable_http_stateless=True,
         authorization_server=as_url,

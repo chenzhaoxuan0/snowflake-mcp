@@ -10,7 +10,7 @@ from snowflake_mcp.sql_safety import (
     is_read_only_sql,
     quote_identifier,
 )
-from snowflake_mcp.transport import _sanitize_error, get_client
+from snowflake_mcp.transport import dispatch_sql
 from snowflake_mcp.types import (
     ColumnSummary,
     DatabaseSummary,
@@ -23,19 +23,8 @@ from snowflake_mcp.types import (
     SchemaSummary,
     TableSummary,
     WarehouseSummary,
+    rows_to_dicts,
 )
-
-
-def _execute(sql: str, *, max_rows: int = 100) -> tuple[list[str], list[dict[str, Any]], bool]:
-    return get_client().execute(sql, max_rows=max_rows)
-
-
-def _safe_execute(sql: str, *, max_rows: int = 100) -> tuple[list[str], list[dict[str, Any]], bool] | str:
-    """Execute with error handling. Returns (columns, rows, truncated) or error string."""
-    try:
-        return _execute(sql, max_rows=max_rows)
-    except (ConnectionError, RuntimeError) as exc:
-        return _sanitize_error(str(exc))
 
 
 # --- Tools ---
@@ -47,10 +36,9 @@ def _safe_execute(sql: str, *, max_rows: int = 100) -> tuple[list[str], list[dic
     annotations=ToolAnnotations(readOnlyHint=True),
 )
 async def list_databases() -> ListDatabasesResult:
-    result = _safe_execute("SHOW DATABASES")
-    if isinstance(result, str):
-        return ListDatabasesResult(success=False, error=result)
-    columns, rows, _ = result
+    columns, rows, err = await dispatch_sql("SHOW DATABASES")
+    if err:
+        return ListDatabasesResult(success=False, error=err)
     return ListDatabasesResult(
         success=True,
         databases=[DatabaseSummary.from_row(r, columns) for r in rows],
@@ -67,10 +55,9 @@ async def list_schemas(database: str = "") -> ListSchemasResult:
         sql = f"SHOW SCHEMAS IN DATABASE {quote_identifier(database)}"
     else:
         sql = "SHOW SCHEMAS IN CURRENT DATABASE()"
-    result = _safe_execute(sql)
-    if isinstance(result, str):
-        return ListSchemasResult(success=False, error=result)
-    columns, rows, _ = result
+    columns, rows, err = await dispatch_sql(sql)
+    if err:
+        return ListSchemasResult(success=False, error=err)
     return ListSchemasResult(
         success=True,
         schemas=[SchemaSummary.from_row(r, columns) for r in rows],
@@ -90,10 +77,9 @@ async def list_tables(database: str = "", schema: str = "") -> ListTablesResult:
         sql = f"SHOW TABLES IN DATABASE {quote_identifier(database)}"
     else:
         sql = "SHOW TABLES IN CURRENT SCHEMA()"
-    result = _safe_execute(sql)
-    if isinstance(result, str):
-        return ListTablesResult(success=False, error=result)
-    columns, rows, _ = result
+    columns, rows, err = await dispatch_sql(sql)
+    if err:
+        return ListTablesResult(success=False, error=err)
     return ListTablesResult(
         success=True,
         tables=[TableSummary.from_row(r, columns) for r in rows],
@@ -115,10 +101,9 @@ async def describe_table(
     else:
         qualified = quote_identifier(table)
     sql = f"DESCRIBE TABLE {qualified}"
-    result = _safe_execute(sql)
-    if isinstance(result, str):
-        return DescribeTableResult(success=False, error=result)
-    columns, rows, _ = result
+    columns, rows, err = await dispatch_sql(sql)
+    if err:
+        return DescribeTableResult(success=False, error=err)
     return DescribeTableResult(
         success=True,
         columns=[ColumnSummary.from_row(r, columns) for r in rows],
@@ -148,15 +133,18 @@ async def run_query(
     if allow_writes:
         warning = "allow_writes=True: query may modify data"
 
-    result = _safe_execute(sql, max_rows=max_rows)
-    if isinstance(result, str):
-        return QueryResult(success=False, error=result, statement=sql)
-    columns, rows, truncated = result
+    columns, raw_rows, err = await dispatch_sql(sql, max_rows=max_rows)
+    if err:
+        return QueryResult(success=False, error=err, statement=sql)
+
+    truncated = len(raw_rows) > max_rows
+    dict_rows = rows_to_dicts(columns, raw_rows[:max_rows])
+
     return QueryResult(
         success=True,
-        rows=rows,
+        rows=dict_rows,
         columns=columns,
-        row_count=len(rows),
+        row_count=len(dict_rows),
         truncated=truncated,
         statement=sql,
         warning=warning,
@@ -169,10 +157,9 @@ async def run_query(
     annotations=ToolAnnotations(readOnlyHint=True),
 )
 async def list_warehouses() -> ListWarehousesResult:
-    result = _safe_execute("SHOW WAREHOUSES")
-    if isinstance(result, str):
-        return ListWarehousesResult(success=False, error=result)
-    columns, rows, _ = result
+    columns, rows, err = await dispatch_sql("SHOW WAREHOUSES")
+    if err:
+        return ListWarehousesResult(success=False, error=err)
     return ListWarehousesResult(
         success=True,
         warehouses=[WarehouseSummary.from_row(r, columns) for r in rows],

@@ -11,8 +11,8 @@ class DatabaseSummary:
     retention_time: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None = None) -> DatabaseSummary:
-        d = _to_dict(row, columns)
+    def from_row(cls, row: list[Any], columns: list[str]) -> DatabaseSummary:
+        d = dict(zip(columns, row))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             created=str(d.get("created_on", d.get("CREATED_ON", ""))),
@@ -27,8 +27,8 @@ class SchemaSummary:
     created: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None = None) -> SchemaSummary:
-        d = _to_dict(row, columns)
+    def from_row(cls, row: list[Any], columns: list[str]) -> SchemaSummary:
+        d = dict(zip(columns, row))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             database=str(d.get("database_name", d.get("DATABASE_NAME", ""))),
@@ -45,8 +45,8 @@ class TableSummary:
     rows: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None = None) -> TableSummary:
-        d = _to_dict(row, columns)
+    def from_row(cls, row: list[Any], columns: list[str]) -> TableSummary:
+        d = dict(zip(columns, row))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             database=str(d.get("database_name", d.get("DATABASE_NAME", ""))),
@@ -65,8 +65,8 @@ class ColumnSummary:
     pk: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None = None) -> ColumnSummary:
-        d = _to_dict(row, columns)
+    def from_row(cls, row: list[Any], columns: list[str]) -> ColumnSummary:
+        d = dict(zip(columns, row))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             type=str(d.get("type", d.get("TYPE", ""))),
@@ -83,8 +83,8 @@ class WarehouseSummary:
     size: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None = None) -> WarehouseSummary:
-        d = _to_dict(row, columns)
+    def from_row(cls, row: list[Any], columns: list[str]) -> WarehouseSummary:
+        d = dict(zip(columns, row))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             state=str(d.get("state", d.get("STATE", ""))),
@@ -139,9 +139,5 @@ class ListWarehousesResult:
     warehouses: list[WarehouseSummary] = field(default_factory=list)
 
 
-def _to_dict(row: dict[str, Any] | tuple[Any, ...], columns: list[str] | None) -> dict[str, Any]:
-    if isinstance(row, dict):
-        return row
-    if columns is None:
-        return {}
-    return dict(zip(columns, row))
+def rows_to_dicts(columns: list[str], rows: list[list[Any]]) -> list[dict[str, Any]]:
+    return [dict(zip(columns, row)) for row in rows]

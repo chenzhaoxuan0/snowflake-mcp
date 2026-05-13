@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "snowflake-mcp"
-version = "0.0.1"
+version = "0.1.0"
 description = "A Snowflake data warehouse MCP server powered by Dedalus."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,12 +16,11 @@ dependencies = [
     "dedalus-mcp>=0.7.0",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
-    "snowflake-connector-python>=3.12.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/chenzhaoxuan0/snowflake-mcp"
-Repository = "https://github.com/chenzhaoxuan0/snowflake-mcp"
+Homepage = "https://github.com/dedalus-labs/snowflake-mcp"
+Repository = "https://github.com/dedalus-labs/snowflake-mcp"
 
 [dependency-groups]
 test = [
