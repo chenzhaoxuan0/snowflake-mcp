@@ -37,4 +37,4 @@ async def main() -> None:
         run_query,
         list_warehouses,
     )
-    await server.serve(8080)
+    await server.serve(port=8080)
