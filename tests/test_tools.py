@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from snowflake_mcp import (
     list_tables,
     list_warehouses,
     run_query,
+    smoke_ping,
 )
 from snowflake_mcp.types import (
     DescribeTableResult,
@@ -34,6 +35,14 @@ def _patch_dispatch(self=None):
 
     with patch("snowflake_mcp.tools.dispatch_sql", side_effect=_noop):
         yield
+
+
+@pytest.mark.asyncio
+async def test_smoke_ping_echoes_message():
+    result = await smoke_ping(message="snowflake-check")
+
+    assert result.ok
+    assert result.message == "snowflake-check"
 
 
 # --- list_databases ---

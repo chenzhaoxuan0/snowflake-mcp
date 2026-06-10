@@ -12,7 +12,7 @@ class DatabaseSummary:
 
     @classmethod
     def from_row(cls, row: list[Any], columns: list[str]) -> DatabaseSummary:
-        d = dict(zip(columns, row))
+        d = dict(zip(columns, row, strict=False))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             created=str(d.get("created_on", d.get("CREATED_ON", ""))),
@@ -28,7 +28,7 @@ class SchemaSummary:
 
     @classmethod
     def from_row(cls, row: list[Any], columns: list[str]) -> SchemaSummary:
-        d = dict(zip(columns, row))
+        d = dict(zip(columns, row, strict=False))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             database=str(d.get("database_name", d.get("DATABASE_NAME", ""))),
@@ -46,7 +46,7 @@ class TableSummary:
 
     @classmethod
     def from_row(cls, row: list[Any], columns: list[str]) -> TableSummary:
-        d = dict(zip(columns, row))
+        d = dict(zip(columns, row, strict=False))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             database=str(d.get("database_name", d.get("DATABASE_NAME", ""))),
@@ -66,7 +66,7 @@ class ColumnSummary:
 
     @classmethod
     def from_row(cls, row: list[Any], columns: list[str]) -> ColumnSummary:
-        d = dict(zip(columns, row))
+        d = dict(zip(columns, row, strict=False))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             type=str(d.get("type", d.get("TYPE", ""))),
@@ -84,7 +84,7 @@ class WarehouseSummary:
 
     @classmethod
     def from_row(cls, row: list[Any], columns: list[str]) -> WarehouseSummary:
-        d = dict(zip(columns, row))
+        d = dict(zip(columns, row, strict=False))
         return cls(
             name=str(d.get("name", d.get("NAME", ""))),
             state=str(d.get("state", d.get("STATE", ""))),
@@ -140,4 +140,4 @@ class ListWarehousesResult:
 
 
 def rows_to_dicts(columns: list[str], rows: list[list[Any]]) -> list[dict[str, Any]]:
-    return [dict(zip(columns, row)) for row in rows]
+    return [dict(zip(columns, row, strict=False)) for row in rows]

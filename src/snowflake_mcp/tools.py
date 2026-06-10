@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from dedalus_mcp import tool
 from dedalus_mcp.types import ToolAnnotations
 
@@ -25,7 +23,6 @@ from snowflake_mcp.types import (
     WarehouseSummary,
     rows_to_dicts,
 )
-
 
 # --- Tools ---
 
@@ -51,10 +48,7 @@ async def list_databases() -> ListDatabasesResult:
     annotations=ToolAnnotations(readOnlyHint=True),
 )
 async def list_schemas(database: str = "") -> ListSchemasResult:
-    if database:
-        sql = f"SHOW SCHEMAS IN DATABASE {quote_identifier(database)}"
-    else:
-        sql = "SHOW SCHEMAS IN CURRENT DATABASE()"
+    sql = f"SHOW SCHEMAS IN DATABASE {quote_identifier(database)}" if database else "SHOW SCHEMAS IN CURRENT DATABASE()"
     columns, rows, err = await dispatch_sql(sql)
     if err:
         return ListSchemasResult(success=False, error=err)
@@ -96,10 +90,7 @@ async def describe_table(
     database: str = "",
     schema: str = "",
 ) -> DescribeTableResult:
-    if database and schema:
-        qualified = build_qualified_name(database, schema, table)
-    else:
-        qualified = quote_identifier(table)
+    qualified = build_qualified_name(database, schema, table) if database and schema else quote_identifier(table)
     sql = f"DESCRIBE TABLE {qualified}"
     columns, rows, err = await dispatch_sql(sql)
     if err:

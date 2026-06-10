@@ -8,7 +8,6 @@ from snowflake_mcp.sql_safety import (
     quote_identifier,
 )
 
-
 # --- is_read_only_sql ---
 
 

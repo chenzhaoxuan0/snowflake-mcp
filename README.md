@@ -23,6 +23,7 @@ A Snowflake data warehouse MCP server powered by [Dedalus](https://dedaluslabs.a
 | `SNOWFLAKE_WAREHOUSE` | No | Default warehouse |
 | `SNOWFLAKE_DATABASE` | No | Default database context |
 | `SNOWFLAKE_SCHEMA` | No | Default schema context |
+| `MCP_SERVER_SLUG` | No | Marketplace slug used to derive the default connection name (default: `Zx/snowflake-mcp`) |
 | `DEDALUS_API_KEY` | Yes | Dedalus platform API key |
 | `DEDALUS_API_URL` | No | Dedalus API base URL |
 | `DEDALUS_AS_URL` | No | Dedalus auth server URL (default: `https://as.dedaluslabs.ai`) |
@@ -40,6 +41,14 @@ CREATE PROGRAMMATIC ACCESS TOKEN my_mcp_token
 ```
 
 See `docs/auth-architecture.md` for details.
+
+For Dedalus hosted deployments, the connection name is derived from the server slug:
+
+```text
+Zx/snowflake-mcp -> Zx-snowflake-mcp
+```
+
+Use that same name when providing runtime credentials.
 
 ## `run_query` Safety
 

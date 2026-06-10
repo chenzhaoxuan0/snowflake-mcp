@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from snowflake_mcp.smoke import smoke_ping, smoke_tools
 from snowflake_mcp.tools import (
     describe_table,
     list_databases,
@@ -17,5 +18,7 @@ __all__ = [
     "list_tables",
     "list_warehouses",
     "run_query",
+    "smoke_ping",
+    "smoke_tools",
     "snowflake_conn",
 ]

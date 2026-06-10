@@ -12,6 +12,7 @@ from snowflake_mcp import (
     list_tables,
     list_warehouses,
     run_query,
+    smoke_ping,
     snowflake_conn,
 )
 
@@ -30,6 +31,7 @@ def create_server() -> MCPServer:
 async def main() -> None:
     server = create_server()
     server.collect(
+        smoke_ping,
         list_databases,
         list_schemas,
         list_tables,

@@ -53,7 +53,7 @@ class TestStatementContext:
 
 class TestConnection:
     def test_connection_uses_token_secret(self) -> None:
-        assert snowflake_conn.name == "snowflake"
+        assert snowflake_conn.name == "Zx-snowflake-mcp"
 
     def test_connection_bearer_format(self) -> None:
         assert "Bearer" in snowflake_conn.auth_header_format
@@ -62,13 +62,16 @@ class TestConnection:
 class TestDispatchSql:
     @pytest.mark.asyncio
     async def test_dispatch_parses_sql_api_response(self) -> None:
-        mock_resp = MagicMock()
-        mock_resp.error = None
-        mock_resp.body = {
+        http_resp = MagicMock()
+        http_resp.status = 200
+        http_resp.body = {
             "code": "090001",
             "rowType": [{"name": "NAME"}, {"name": "CREATED_ON"}],
             "data": [["DB1", "2024-01-01"], ["DB2", "2024-02-01"]],
         }
+        mock_resp = MagicMock()
+        mock_resp.success = True
+        mock_resp.response = http_resp
 
         mock_ctx = MagicMock()
         mock_ctx.dispatch = AsyncMock(return_value=mock_resp)
@@ -84,9 +87,12 @@ class TestDispatchSql:
 
     @pytest.mark.asyncio
     async def test_dispatch_returns_error(self) -> None:
+        error = MagicMock()
+        error.message = "Unauthorized"
         mock_resp = MagicMock()
-        mock_resp.error = "Unauthorized"
-        mock_resp.body = {}
+        mock_resp.success = False
+        mock_resp.response = None
+        mock_resp.error = error
 
         mock_ctx = MagicMock()
         mock_ctx.dispatch = AsyncMock(return_value=mock_resp)
@@ -101,13 +107,16 @@ class TestDispatchSql:
 
     @pytest.mark.asyncio
     async def test_dispatch_truncates_rows(self) -> None:
-        mock_resp = MagicMock()
-        mock_resp.error = None
-        mock_resp.body = {
+        http_resp = MagicMock()
+        http_resp.status = 200
+        http_resp.body = {
             "code": "090001",
             "rowType": [{"name": "ID"}],
             "data": [[i] for i in range(200)],
         }
+        mock_resp = MagicMock()
+        mock_resp.success = True
+        mock_resp.response = http_resp
 
         mock_ctx = MagicMock()
         mock_ctx.dispatch = AsyncMock(return_value=mock_resp)
@@ -117,3 +126,23 @@ class TestDispatchSql:
             columns, rows, err = await dispatch_sql("SELECT 1", max_rows=100)
 
         assert len(rows) == 100
+
+    @pytest.mark.asyncio
+    async def test_dispatch_returns_http_error(self) -> None:
+        http_resp = MagicMock()
+        http_resp.status = 401
+        http_resp.body = {"message": "invalid token"}
+        mock_resp = MagicMock()
+        mock_resp.success = True
+        mock_resp.response = http_resp
+
+        mock_ctx = MagicMock()
+        mock_ctx.dispatch = AsyncMock(return_value=mock_resp)
+
+        with patch("snowflake_mcp.transport.get_context", return_value=mock_ctx):
+            from snowflake_mcp.transport import dispatch_sql
+            columns, rows, err = await dispatch_sql("SELECT 1")
+
+        assert columns == []
+        assert rows == []
+        assert "401" in err

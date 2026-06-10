@@ -6,7 +6,7 @@ from typing import Any
 from dedalus_mcp import HttpMethod, HttpRequest, get_context
 from dedalus_mcp.auth import Connection, SecretKeys
 
-_CONN_NAME = "snowflake"
+_CONN_NAME = os.getenv("MCP_SERVER_SLUG", "Zx/snowflake-mcp").replace("/", "-")
 
 
 def _base_url() -> str:
@@ -60,10 +60,15 @@ async def dispatch_sql(
     req = HttpRequest(method=HttpMethod.POST, path="/api/v2/statements", body=body, headers=headers)
     resp = await ctx.dispatch(_CONN_NAME, req)
 
-    if resp.error:
-        return [], [], resp.error
+    if not resp.success or resp.response is None:
+        return [], [], resp.error.message if resp.error else "Snowflake request failed"
 
-    data = resp.body or {}
+    data = resp.response.body or {}
+    if resp.response.status >= 400:
+        return [], [], f"Snowflake API error ({resp.response.status}): {data}"
+
+    if not isinstance(data, dict):
+        return [], [], f"Unexpected Snowflake response body: {type(data).__name__}"
 
     code = str(data.get("code", ""))
     if code and code not in ("090001", "333001"):
@@ -74,7 +79,6 @@ async def dispatch_sql(
     columns = [col["name"] for col in row_type] if row_type else []
 
     raw_rows = data.get("data", [])
-    truncated = len(raw_rows) > max_rows
     rows = raw_rows[:max_rows]
 
     return columns, rows, None if code in ("090001", "333001", "") else data.get("message")
